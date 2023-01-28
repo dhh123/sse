@@ -1,4 +1,4 @@
-module github.com/dhh123/sse/v2
+module github.com/dhh123/sse/master
 
 go 1.13
 
