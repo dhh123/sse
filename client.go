@@ -11,11 +11,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
+	"net"
+	"net/http/cookiejar"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	http "github.com/Carcraftz/fhttp"
+	utls "github.com/Carcraftz/utls"
+	"golang.org/x/net/proxy"
 	"gopkg.in/cenkalti/backoff.v1"
 )
 
@@ -56,12 +60,48 @@ type Client struct {
 	EncodingBase64    bool
 	Connected         bool
 }
+type roundTripper struct {
+	sync.Mutex
+
+	clientHelloId utls.ClientHelloID
+
+	cachedConnections map[string]net.Conn
+	cachedTransports  map[string]http.RoundTripper
+
+	dialer proxy.ContextDialer
+}
+
+func newRoundTripper(clientHello utls.ClientHelloID, dialer ...proxy.ContextDialer) http.RoundTripper {
+	if len(dialer) > 0 {
+		return &roundTripper{
+			dialer: dialer[0],
+
+			clientHelloId: clientHello,
+
+			cachedTransports:  make(map[string]http.RoundTripper),
+			cachedConnections: make(map[string]net.Conn),
+		}
+	} else {
+		return &roundTripper{
+			dialer: proxy.Direct,
+
+			clientHelloId: clientHello,
+
+			cachedTransports:  make(map[string]http.RoundTripper),
+			cachedConnections: make(map[string]net.Conn),
+		}
+	}
+}
 
 // NewClient creates a new client
-func NewClient(url string, opts ...func(c *Client)) *Client {
+func NewClient(clientHello utls.ClientHelloID, url string, opts ...func(c *Client)) *Client {
+	cJar, _ := cookiejar.New(nil)
 	c := &Client{
-		URL:           url,
-		Connection:    &http.Client{},
+		URL: url,
+		Connection: &http.Client{
+			Jar:       cJar,
+			Transport: newRoundTripper(clientHello, nil),
+		},
 		Headers:       make(map[string]string),
 		subscribed:    make(map[chan *Event]chan struct{}),
 		maxBufferSize: 1 << 16,
