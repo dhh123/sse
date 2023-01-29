@@ -27,15 +27,6 @@ func wait(ch chan *Event, duration time.Duration) ([]byte, error) {
 	return msg, err
 }
 
-func waitEvent(ch chan *Event, duration time.Duration) (*Event, error) {
-	select {
-	case event := <-ch:
-		return event, nil
-	case <-time.After(duration):
-		return nil, errors.New("timeout")
-	}
-}
-
 func TestServerCreateStream(t *testing.T) {
 	s := New()
 	defer s.Close()
